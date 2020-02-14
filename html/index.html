@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sample file service</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" type="text/css" href="/static/fileform.css">
+  <script src="/static/fileform.js"></script>
+</head>
+<body onload = pageLoaded();>
+  <form>
+    <input type="file" id="files" name="files[]" multiple />
+    <input type="button" value="Отправить" onclick="return save(this.form, '/upload');">
+  </form>
+  <output id="list"></output>
+  <div id="drop_zone">Drop files here</div>
+  <div id="log"></div>
+</body>
+</html>
