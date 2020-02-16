@@ -12,8 +12,8 @@ services:
     volumes:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
-      - ./var/data:/opt/app/var/data
-      - ./var/html:/opt/app/var/html
+      - ./var:/opt/app/var
+      - ./html:/opt/app/html
     build:
       context: .
     networks:

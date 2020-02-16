@@ -27,6 +27,9 @@ APP_IMAGE  ?= $(PRG)
 # image prefix
 PROJECT_NAME ?= $(PRG)
 
+# dcape net
+DCAPE_NET    ?= dcape_default
+
 # docker-compose image
 DC_VER ?= 1.23.2
 
@@ -48,6 +51,9 @@ APP_LISTEN=$(APP_LISTEN)
 
 # Docker image tag
 APP_IMAGE=$(APP_IMAGE)
+
+# dcape net
+DCAPE_NET=$(DCAPE_NET)
 
 endef
 export CONFIG_DEFAULT
