@@ -8,23 +8,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 	log "go.uber.org/zap"
+
+	"github.com/LeKovr/sfs/storage"
 )
 
 // codebeat:disable[TOO_MANY_IVARS]
 
 // Config holds all config vars
 type Config struct {
-	DataPath       string `long:"data" default:"data" description:"Path to served files"`
 	FilesFieldName string `long:"field" default:"files[]" description:"Files form field name"`
 }
 
 // codebeat:enable[TOO_MANY_IVARS]
 
 var (
-
 	// ErrNoAnyFile returned when request does not contain item in field 'files[]'
-	ErrNoAnyFile = errors.New("field 'file' does not contains single item")
-
+	ErrNoAnyFile = errors.New("field 'file' does not contains any item")
+	// ErrNoAuth returned on Internal Server Error (no auth for upload)
 	ErrNoAuth = errors.New("This endpoint must be under AuthRequired")
 )
 
@@ -33,11 +33,12 @@ type Service struct {
 	Config     *Config
 	Log        *log.SugaredLogger
 	ContextKey string
+	store      *storage.Service
 }
 
 // New creates an Service object
-func New(cfg Config, logger *log.SugaredLogger, key string) *Service {
-	return &Service{&cfg, logger, key}
+func New(cfg Config, logger *log.SugaredLogger, store *storage.Service, key string) *Service {
+	return &Service{&cfg, logger, key, store}
 }
 
 func (srv Service) SetupRouter(r *gin.Engine) {
@@ -49,15 +50,11 @@ func (srv Service) SetupRouter(r *gin.Engine) {
 			c.String(http.StatusNotImplemented, "Content type (%s) not supported", c.ContentType())
 		}
 	})
+	r.GET("/api/files", srv.Files())
+	r.GET("/file/:id", srv.File())
 }
 
-var i int
-
 func (srv Service) HandleMultiPart(c *gin.Context) {
-	form, _ := c.MultipartForm()
-	files := form.File[srv.Config.FilesFieldName]
-	names := map[int]string{}
-
 	tokenIface, _ := c.Get(srv.ContextKey)
 	if tokenIface == nil {
 		c.AbortWithError(http.StatusInternalServerError, ErrNoAuth)
@@ -65,16 +62,60 @@ func (srv Service) HandleMultiPart(c *gin.Context) {
 	}
 	token := tokenIface.(string)
 	srv.Log.Debugw("Got user token", "token", token)
+
+	form, _ := c.MultipartForm()
+	files := form.File[srv.Config.FilesFieldName]
+	if len(files) == 0 {
+		c.AbortWithError(http.StatusBadRequest, ErrNoAnyFile)
+		return
+	}
+	names := map[string]string{}
 	for _, file := range files {
-		srv.Log.Debugw("Store file", "id", i, "name", file.Filename, "size", file.Size)
-		// TODO: для каждого файла генерим uuid
-		dst := fmt.Sprintf("data/%d.data", i)
-		if err := c.SaveUploadedFile(file, dst); err != nil {
+		fileID, err := srv.store.AddFile(token, file)
+		if err != nil {
 			c.String(http.StatusBadRequest, fmt.Sprintf("upload file err: %s", err.Error()))
 			return
 		}
-		names[i] = file.Filename
-		i++
+		names[file.Filename] = fileID
 	}
 	c.JSON(http.StatusOK, gin.H{"files": names})
+}
+
+// AuthRequired is a simple middleware to check the session
+func (srv Service) Files() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		tokenIface, _ := c.Get(srv.ContextKey)
+		if tokenIface == nil {
+			c.AbortWithError(http.StatusInternalServerError, ErrNoAuth)
+			return
+		}
+		token := tokenIface.(string)
+		srv.Log.Debugw("Got user token", "token", token)
+		files, err := srv.store.FileList(token)
+		if err != nil {
+			c.AbortWithError(http.StatusInternalServerError, err)
+			return
+		}
+		c.JSON(http.StatusOK, files)
+	}
+}
+
+// AuthRequired is a simple middleware to check the session
+func (srv Service) File() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		tokenIface, _ := c.Get(srv.ContextKey)
+		if tokenIface == nil {
+			c.AbortWithError(http.StatusInternalServerError, ErrNoAuth)
+			return
+		}
+		token := tokenIface.(string)
+		file, filePath, err := srv.store.File(token, c.Param("id"))
+		if err != nil {
+			c.AbortWithError(http.StatusNotFound, err)
+			return
+		}
+		c.Header("Content-Transfer-Encoding", "binary")
+		c.Header("Content-Disposition", "attachment; filename="+file.Name)
+		c.File(filePath)
+	}
 }

@@ -6,13 +6,20 @@ version: '2.1'
 services:
   app:
     image: ${APP_IMAGE}
-    command:
-      --listen=:8080 --path=/data
     labels:
+      - "traefik.enable=true"
       - "traefik.frontend.rule=Host:${APP_SITE}"
     volumes:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
-      - ./data:/data
+      - ./var/data:/opt/app/var/data
+      - ./var/html:/opt/app/var/html
     build:
       context: .
+    networks:
+       - app-network
+
+networks:
+  app-network:
+    external:
+      name: ${DCAPE_NET}

@@ -1,0 +1,58 @@
+/* 
+https://css-tricks.com/accessible-simple-responsive-tables/
+*/
+
+/* Tables
+================================== */
+.Rtable {
+  display: flex;
+  flex-wrap: wrap;
+  margin: 0 0 3em 0;
+  padding: 0;
+}
+.Rtable-cell {
+  box-sizing: border-box;
+  flex-grow: 1;
+  width: 100%;  // Default to full width
+  padding: 0.8em 1.2em;
+  overflow: hidden; // Or flex might break
+  list-style: none;
+  border: solid 3px white;
+  background: fade(slategrey,20%);
+  > h1, > h2, > h3, > h4, > h5, > h6 { margin: 0; }
+}
+
+/* Table column sizing
+================================== */
+.Rtable--5cols > .Rtable-short  { width: 12%; }
+.Rtable--5cols > .Rtable-long  { width: 52%; }
+
+.Rtable-short  { width: 12%; }
+.Rtable-long  { width: 52%; }
+
+.row { width: 100%; 
+   display: flex;
+}
+/* Page styling
+================================== */
+@import url(https://fonts.googleapis.com/css?family=Josefin+Sans:400,700);
+html { 
+  height: 100%;
+  background-color: #EEE; 
+}
+body {
+  box-sizing: border-box;
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 2em;
+  max-width: 800px;
+  font-family: 'Josefin Sans', sans-serif;
+  font-size: 1em;
+  background-color: white;
+  border: double 3px #DDD;
+  border-top: none; border-bottom: none;
+}
+h1, h2, h3, h4, h5, h6 { margin-top: 0; }
+h3 { font-size: 1.2em; }
+h4 { font-size: 1em; }
+strong { color: darken(slategrey,20%); }

@@ -1,0 +1,78 @@
+// Package upload implements image upload handlers.
+package pubsub
+
+// Code based on https://raw.githubusercontent.com/ThreeDotsLabs/watermill/master/_examples/pubsubs/go-channel/main.go
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	//	"fmt"
+
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/message"
+	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
+	log "go.uber.org/zap"
+)
+
+// codebeat:disable[TOO_MANY_IVARS]
+
+// Config holds all config vars
+type Config struct {
+	CookieName   string `long:"cookie" default:"sfs_auth" description:"Auth cookie name"`
+	HeaderName   string `long:"header" default:"X-SFS-Auth" description:"Auth header name"`
+	CookieMaxAge int    `long:"cookie_ttl" default:"3600" description:"Auth cookie TTL"`
+}
+
+// codebeat:enable[TOO_MANY_IVARS]
+
+const (
+	// ErrNoSingleFile returned when does not contain single file in field 'file'
+	ErrNoSingleFile = "field 'file' does not contains single item"
+)
+
+var (
+	// ErrNoAnyFile returned when request does not contain item in field 'files[]'
+	ErrNoAnyFile = errors.New("field 'file' does not contains any item")
+	// ErrNoAuth returned on Internal Server Error (no auth for upload)
+	ErrNoAuth = errors.New("This endpoint must be under AuthRequired")
+)
+
+// Service holds upload service
+type Service struct {
+	Config *Config
+	Log    *log.SugaredLogger
+	pubSub *gochannel.GoChannel
+}
+
+// New creates an Service object
+func New(cfg Config, logger *log.SugaredLogger) *Service {
+	ps := gochannel.NewGoChannel(
+		gochannel.Config{},
+		watermill.NewStdLogger(true, true), //false, false),
+	)
+	return &Service{&cfg, logger, ps}
+}
+
+type Stream <-chan *message.Message
+
+func (srv Service) Subscribe(topic string) (Stream, error) {
+	return srv.pubSub.Subscribe(context.Background(), topic)
+}
+
+func (srv Service) Publish(topic string, data interface{}) error {
+	publisher := srv.pubSub
+	b, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	//srv.Log.Debugw("Send event", "topic", topic, "data", string(b))
+	//srv.Log.Debugw("Send event", "topic", topic, "data", fmt.Sprintf("%+v", data))
+
+	msg := message.NewMessage(watermill.NewUUID(), b)
+	return publisher.Publish(topic, msg)
+}
+
+func Unmarshal(data []byte, v interface{}) error {
+	return json.Unmarshal(data, v)
+}

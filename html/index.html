@@ -5,15 +5,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="stylesheet" type="text/css" href="/static/fileform.css">
+  <link rel="stylesheet" type="text/css" href="/static/table.css">
   <script src="/static/fileform.js"></script>
 </head>
 <body onload = pageLoaded();>
+  <h1>Файл-сервер</h1>
+  <h2>Мои файлы</h2>
+    <div id="stored" class="Rtable Rtable--5cols"></div>
+  <h2>Добавить файлы</h2>
   <form>
-    <input type="file" id="files" name="files[]" multiple />
-    <input type="button" value="Отправить" onclick="return save(this.form, '/upload');">
+    <input type="file" id="files" name="files[]" multiple style="width:80%" />
+    <div id="drop_zone" onclick="document.getElementById('files').click();">Drop files here</div>
+    <div id="list" class="Rtable Rtable--5cols"></div>
+    <input type="button" value="Отправить" onclick="return sendForm(this.form, '/upload');">
+    <input type="button" value="Сбросить" onclick="return clearForm(this.form);">
+    <input type="button" value="Отменить" id="abort" class="reversed" disabled>
   </form>
-  <output id="list"></output>
-  <div id="drop_zone">Drop files here</div>
   <div id="log"></div>
+   <div id="stream"></div>
+   <!--
+  <h2>Отзыв</h2>
+  Мы пока реализовали только функционал, дизайнеров интерфейса еще не звали.<br /> Но нам уже интересно Ваше мнение: все ли работает, все ли удобно и что стоит доработать. Давайте сделаем этот сайт вместе. Спасибо.
+  <textarea placeholder="Отзыв
+
+
+--
+Подпись" style="width:100%" rows=5>
+</textarea>
+    <input type="button" value="Отправить" disabled>
+-->
 </body>
 </html>

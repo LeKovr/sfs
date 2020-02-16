@@ -1,5 +1,11 @@
 // save file
-function save(form, path) {
+var Meta = {
+    token: '',        // session token
+    timer: null,      // keepalive timer
+    timeout: 5000,    // ping & reconnect timeout
+};
+
+function sendForm(form, path) {
   var div  = document.getElementById("log"),
       xhr  = new XMLHttpRequest();
   div.innerHTML = '';
@@ -22,8 +28,8 @@ function save(form, path) {
   }
   //console.log(...fd);
 
-  disable_form(form, true);
   xhr.open('POST', path);
+  //xhr.responseType = 'json';
   //  xhr.setRequestHeader('Content-Type', 'application/json');
   xhr.onprogress = function (e) {
     if (e.lengthComputable) {
@@ -52,12 +58,24 @@ function save(form, path) {
       div.innerHTML = xhr.statusText;
     } else {
       console.log('Result: ' + xhr.responseText);
-      //rv = JSON.parse(xhr.responseText);
-    
-      div.innerHTML = xhr.responseText; //a.outerHTML;
+      rv = JSON.parse(xhr.responseText);
+      for (let [key, value] of Object.entries(rv.files)) {
+        console.log(`${key}: ${value}`);
+        var elem = document.querySelectorAll("[data-filename='"+key+"']")[0];
+        elem.dataset.fileid = value;
+        elem.innerHTML='Received';
+      }
+      div.innerHTML = 'Done';//xhr.responseText; //a.outerHTML;
     }
     disable_form(form, false);
   }
+  document.getElementById("abort").addEventListener("click", 
+   function() {
+    console.log('Aborted by user');
+    xhr.abort();
+  });
+  disable_form(form, true);
+
   xhr.send(fd);
   return false;
 }
@@ -75,7 +93,12 @@ function disable_form(form, state) {
 function disable_elements(elements, state) {
   var length = elements.length;
   while(length--) {
-    elements[length].disabled = state;
+    var e = elements[length];
+   if (e.classList.contains('reversed')) {
+    e.disabled = !state;
+   } else {
+    e.disabled = state;
+   }
   }
 }
 
@@ -101,22 +124,56 @@ function handleFileDrop(evt) {
   document.getElementById("log").innerHTML='';
 }
 
-function showFiles(files) {
-  // files is a FileList of File objects. List some properties.
-  var output = [];
-  for (var i = 0, f; f = files[i]; i++) {
-    // TODO: if (file.size > maxFileSize) {
-    var h = document.createElement("strong");
-    var t = document.createTextNode(f.name); // no escape needed for text
-    h.appendChild(t);
-    output.push('<li>',h.innerHTML,' (', f.type || 'n/a', ') - ',
-                f.size, ' bytes, last modified: ',
-                f.lastModifiedDate ? f.lastModifiedDate.toLocaleDateString() : 'n/a',
-                '</li>');
-  }
-  document.getElementById('list').innerHTML = '<ul>' + output.join('') + '</ul>';
+function cell(val,className) {
+  var c = document.createElement("div");
+  if (className === undefined) className = "Rtable-short";
+  c.classList.add("Rtable-cell");
+  c.classList.add(className);
+  var t = document.createTextNode(val); 
+  c.appendChild(t);
+  return c
+}
+function cellLink(val,id) {
+  if (id === undefined) return cell(val,"Rtable-long");
+  var c = document.createElement("div");
+  c.classList.add("Rtable-cell");
+  c.classList.add("Rtable-long");
+  var a = document.createElement('a');
+  var link = document.createTextNode(val); 
+  a.appendChild(link); 
+  a.href = '/file/'+id;
+  c.appendChild(a);
+  return c
+}
+function row(elem,name,ctype,size,time,state,id) {
+  var c = document.createElement("div");
+  c.classList.add("row");
+  c.appendChild(cellLink(name,id));
+  c.appendChild(cell(ctype));
+  c.appendChild(cell(size));
+  c.appendChild(cell(time));
+  c.appendChild(cell(state));
+  var cmd = cell('[x]');
+  cmd.dataset.filename = name;
+  c.appendChild(cmd);
+  elem.appendChild(c);
 }
 
+function showFiles(files) {
+  // files is a FileList of File objects. List some properties.
+  var d= document.getElementById('list');
+  d.innerHTML='';
+  for (var i = 0, f; f = files[i]; i++) {
+    // TODO: if (file.size > maxFileSize) {
+       row(d,
+        f.name, 
+        f.type || 'n/a', 
+        f.size/1000 + 'Kb',
+        f.lastModifiedDate ? f.lastModifiedDate.toLocaleDateString() : 'n/a',
+        'Ready'
+      );
+  }
+}
 
 function handleDragOver(evt) {
   evt.stopPropagation();
@@ -124,8 +181,19 @@ function handleDragOver(evt) {
   evt.dataTransfer.dropEffect = 'copy'; // Explicitly show this is a copy.
 }
 
-function pageLoaded() {
 
+function clearForm(form) {
+  console.log('reset');
+  documentFiles = null;
+  document.getElementById('list').innerHTML = '';
+  document.querySelector('form').reset(); // clear file input
+  document.getElementById("log").innerHTML='';
+
+  return true;
+}
+
+function pageLoaded() {
+  getFiles();
   var dropZone = document.getElementById('drop_zone');
 
   // Check for the various File API support.
@@ -133,10 +201,124 @@ function pageLoaded() {
     // Setup the dnd listeners.
     dropZone.addEventListener('dragover', handleDragOver, false);
     dropZone.addEventListener('drop', handleFileDrop, false);
-
     document.getElementById('files').addEventListener('change', handleFileSelect, false);
   } else {
     console.log('The File APIs are not fully supported in this browser.');
     dropZone.style.display = 'none';
+  }
+  getProfile()
+}
+
+function getFiles() {
+  var xhr  = new XMLHttpRequest();
+  xhr.open('GET', '/api/files');
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState != 4) return;
+    if (xhr.status != 200) {
+      console.log(xhr.status + ': ' + xhr.statusText);
+    } else {
+      var files = JSON.parse(xhr.responseText);
+      if (files == undefined) return;
+      var d = document.getElementById('stored');
+      d.innerHTML='';
+      for (var i = 0, f; f = files[i]; i++) {
+        // TODO: if (file.size > maxFileSize) {
+           row(d,
+            f.name, 
+            f.type || 'n/a', 
+            f.size/1000 + 'Kb',
+            f.created_at ? new Date(f.created_at).toLocaleDateString() : 'n/a',
+            f.state,
+            f.id
+          );
+      }
+    }
+  }
+  xhr.send();
+}
+
+function getProfile() {
+  var xhr  = new XMLHttpRequest();
+  xhr.open('GET', '/api/profile');
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState != 4) return;
+    if (xhr.status != 200) {
+      console.log(xhr.status + ': ' + xhr.statusText);
+    } else {
+      var profile = JSON.parse(xhr.responseText);
+      if (profile == undefined) return;
+      Meta.token = profile.token;
+      openStream();
+    }
+  }
+  xhr.send();
+}
+
+function openAgain() {
+  if (Meta.timer) {
+    clearTimeout(Meta.timer);
+  }
+  Meta.timer = setTimeout(openStream, Meta.timeout);
+} 
+
+// Setup websocket
+function openStream() {
+  try {
+    var loc = window.location, url;
+    if (loc.protocol === "https:") {
+        url = "wss:";
+    } else {
+        url = "ws:";
+    }
+    url += "//" + loc.host;
+    url += loc.pathname + "ws";
+    url += '/'+Meta.token;
+
+    c = new WebSocket(url);
+    if (c == null) {
+      openAgain() // TODO: do we need it?
+      return
+    }
+    var d= document.getElementById('stream');
+    console.log("Token: "+Meta.token)
+/*
+    send = function(data){
+      if (c != null) c.send(data)
+    }
+*/
+    c.onopen = function(){
+      console.log("WS OPEN")
+      document.getElementById("log").innerHTML='';
+     }
+    c.onerror = function(evt) {
+      console.log("WS ERROR: " + evt.data)
+    }
+    c.onclose = function(evt) {
+      console.log("WS CLOSE")
+      c = null;
+      if (event.wasClean) {
+        console.debug('Connection closed clean');
+      } else {
+        console.debug('Connection aborted');
+      }
+      console.debug('Code: ' + event.code + ' reason: ' + event.reason);
+      document.getElementById("log").innerHTML='Connection closed';
+      openAgain()
+    }
+    c.onmessage = function(msg){
+     // d.append((new Date())+ " <== "+msg.data+"<br/>\n")
+      console.log('WS>>>'+msg.data)
+      var m = JSON.parse(msg.data);
+      if (m.State == 'saved'){
+        var elem = document.querySelectorAll("[data-fileid='"+m.FileID+"']")[0];
+console.log('ELEM4RM',elem)
+        if (elem != undefined) {
+         elem.parentElement.remove();
+        }
+        getFiles();
+      }
+    }
+  } catch(e){
+    console.log(e);
   }
 }
