@@ -55,6 +55,7 @@ func (srv Service) SetupRouter(r *gin.Engine) {
 }
 
 func (srv Service) HandleMultiPart(c *gin.Context) {
+	// TODO: где-то тут вылетает паника при обрыве аплоада клиентом
 	tokenIface, _ := c.Get(srv.ContextKey)
 	if tokenIface == nil {
 		c.AbortWithError(http.StatusInternalServerError, ErrNoAuth)
