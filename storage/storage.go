@@ -149,7 +149,7 @@ func (srv Service) AddFile(token string, file *multipart.FileHeader) (key string
 		err := srv.saveUploadedFile(file, dst, token, id)
 		if err != nil {
 			srv.Log.Errorw("File save error", "token", token, "file", id, "error", err)
-			err = srv.pubsub.Publish("user."+token, UserEvent{id, "error"})
+			err = srv.pubsub.Publish("user."+token, UserEvent{"file", id, "error"})
 			if err != nil {
 				srv.Log.Errorw("File save publish error", "token", token, "file", id, "error", err)
 			}
@@ -160,8 +160,9 @@ func (srv Service) AddFile(token string, file *multipart.FileHeader) (key string
 }
 
 type UserEvent struct {
-	FileID string
-	State  string
+	Type   string `json:"type"`
+	FileID string `json:"id"`
+	State  string `json:"state"`
 }
 
 // SaveUploadedFile is a copy of gin.Context.SaveUploadedFile without context dep
@@ -203,11 +204,11 @@ func (srv Service) FileStateChange(id, state string) error {
 		return err
 	}
 	//	srv.Log.Debugw("Raise event", "data", fmt.Sprintf("%+v", ev))
-	err = srv.pubsub.Publish("user."+token, UserEvent{id, state})
+	err = srv.pubsub.Publish("user."+token, UserEvent{"file", id, state})
 	if err != nil {
 		return err
 	}
-	err = srv.pubsub.Publish("file", UserEvent{id, state})
+	err = srv.pubsub.Publish("file", UserEvent{"file", id, state})
 	return err
 }
 

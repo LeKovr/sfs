@@ -41,7 +41,8 @@ const (
 
 var (
 	// ErrNoAuth returned on Internal Server Error (no auth for upload)
-	ErrNoAuth = errors.New("This endpoint must be under AuthRequired")
+	ErrNoAuth       = errors.New("This endpoint must be under AuthRequired")
+	ErrNotSupported = errors.New("This ws call is not supported")
 )
 
 // Service holds upload service
@@ -58,15 +59,31 @@ func New(cfg Config, logger *log.SugaredLogger, ps *pubsub.Service, key string) 
 }
 
 func (srv Service) SetupRouter(r *gin.Engine) {
-	r.GET("/ws/:key", func(c *gin.Context) {
+	r.GET("/ws/:request/:key/", func(c *gin.Context) {
+		reqID := c.Param("request")
 		token := c.Param("key")
-		if token == "" {
-			c.AbortWithError(http.StatusUnauthorized, ErrNoAuth)
+		if reqID == "" && token == "" {
+			c.AbortWithError(http.StatusNotImplemented, ErrNotSupported)
 			return
 		}
-		srv.Log.Debugw("Got user token", "token", token)
-
-		srv.wshandler(c.Writer, c.Request, token)
+		var streams []pubsub.Stream
+		if token != "" {
+			stream, err := srv.pubsub.Subscribe("user." + token)
+			if err != nil {
+				srv.Log.Errorw("Failed to subscribe", "error", err)
+				return
+			}
+			streams = append(streams, stream)
+		}
+		if reqID != "" && reqID != "-" {
+			stream, err := srv.pubsub.Subscribe("once.widget." + reqID)
+			if err != nil {
+				srv.Log.Errorw("Failed to subscribe", "error", err)
+				return
+			}
+			streams = append(streams, stream)
+		}
+		srv.wshandler(c.Writer, c.Request, streams)
 	})
 }
 
@@ -76,7 +93,7 @@ var wsupgrader = websocket.Upgrader{
 	CheckOrigin:     func(r *http.Request) bool { return true },
 }
 
-func (srv Service) wshandler(w http.ResponseWriter, r *http.Request, token string) {
+func (srv Service) wshandler(w http.ResponseWriter, r *http.Request, streams []pubsub.Stream) {
 	conn, err := wsupgrader.Upgrade(w, r, nil)
 	if err != nil {
 		srv.Log.Errorw("Failed to set websocket upgrade", "error", err)
@@ -88,17 +105,30 @@ func (srv Service) wshandler(w http.ResponseWriter, r *http.Request, token strin
 		conn.Close()
 	}()
 
-	stream, err := srv.pubsub.Subscribe("user." + token)
-	if err != nil {
-		srv.Log.Errorw("Failed to subscribe", "error", err)
-		return
+	for _, s := range streams {
+		defer s.Unsubscribe()
 	}
-	defer stream.Unsubscribe()
-
-	srv.Log.Debugw("Subscribed on", "prefix", "user", "topic", token)
+	if len(streams) == 1 {
+		streams = append(streams, pubsub.Stream{Messages: make(chan pubsub.Message)}) //fake channel for switch
+	}
+	//	srv.Log.Debugw("Subscribed on", "prefix", "user", "topic", token)
 	for {
 		select {
-		case msg, ok := <-stream.Messages:
+		case msg, ok := <-streams[0].Messages:
+			if !ok {
+				// Channel closed,exit
+				srv.Log.Debugw("Subscription closed")
+				conn.WriteMessage(websocket.CloseMessage, []byte{})
+				return
+			}
+			srv.Log.Debugw("Received event", "data", string(msg.Payload))
+			conn.SetWriteDeadline(time.Now().Add(writeWait))
+			err = conn.WriteMessage(websocket.TextMessage, msg.Payload)
+			if err != nil {
+				srv.Log.Warnw("Failed to send ws message", "error", err)
+				return
+			}
+		case msg, ok := <-streams[1].Messages:
 			if !ok {
 				// Channel closed,exit
 				srv.Log.Debugw("Subscription closed")

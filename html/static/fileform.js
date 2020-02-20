@@ -192,19 +192,21 @@ function clearForm(form) {
   return true;
 }
 
-function pageLoaded() {
-  getFiles();
-  var dropZone = document.getElementById('drop_zone');
+function pageLoaded(useFiles) {
+  if (useFiles) {
+    getFiles();
+    var dropZone = document.getElementById('drop_zone');
 
-  // Check for the various File API support.
-  if (window.File && window.FileReader && window.FileList && window.Blob) {
-    // Setup the dnd listeners.
-    dropZone.addEventListener('dragover', handleDragOver, false);
-    dropZone.addEventListener('drop', handleFileDrop, false);
-    document.getElementById('files').addEventListener('change', handleFileSelect, false);
-  } else {
-    console.log('The File APIs are not fully supported in this browser.');
-    dropZone.style.display = 'none';
+    // Check for the various File API support.
+    if (window.File && window.FileReader && window.FileList && window.Blob) {
+      // Setup the dnd listeners.
+      dropZone.addEventListener('dragover', handleDragOver, false);
+      dropZone.addEventListener('drop', handleFileDrop, false);
+      document.getElementById('files').addEventListener('change', handleFileSelect, false);
+    } else {
+      console.log('The File APIs are not fully supported in this browser.');
+      dropZone.style.display = 'none';
+    }
   }
   getProfile()
 }
@@ -271,15 +273,20 @@ function openStream() {
         url = "ws:";
     }
     url += "//" + loc.host;
-    url += loc.pathname + "ws";
-    url += '/'+Meta.token;
+    url += "/" + "ws";
+    if (typeof RequestID === 'undefined') {
+      url += '/-'
+    } else {
+      url += '/'+RequestID
+    }
+    url += '/'+Meta.token+'/';
 
     c = new WebSocket(url);
     if (c == null) {
       openAgain() // TODO: do we need it?
       return
     }
-    var d= document.getElementById('stream');
+    var d = document.getElementById('stream');
     console.log("Token: "+Meta.token)
 /*
     send = function(data){
@@ -305,17 +312,23 @@ function openStream() {
       document.getElementById("log").innerHTML='Connection closed';
       openAgain()
     }
-    c.onmessage = function(msg){
-     // d.append((new Date())+ " <== "+msg.data+"<br/>\n")
+    c.onmessage = function(msg) {
       console.log('WS>>>'+msg.data)
       var m = JSON.parse(msg.data);
-      if (m.State == 'saved'){
-        var elem = document.querySelectorAll("[data-fileid='"+m.FileID+"']")[0];
-console.log('ELEM4RM',elem)
-        if (elem != undefined) {
-         elem.parentElement.remove();
+      if (m.type == "widget") {
+        console.log('include ' + m.id)
+        document.getElementById(m.id).innerHTML = m.data;
+      } else if (m.type == "file") {
+        if (m.state == 'saved'){
+          var elem = document.querySelectorAll("[data-fileid='"+m.id+"']")[0];
+          console.log('ELEM4RM',elem)
+          if (elem != undefined) {
+           elem.parentElement.remove();
+          }
+          getFiles();
+        } else {
+          console.log('Unhandled message: '+msg.data)
         }
-        getFiles();
       }
     }
   } catch(e){

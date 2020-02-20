@@ -12,6 +12,7 @@ import (
 	"github.com/LeKovr/sfs/pubsub"
 	"github.com/LeKovr/sfs/storage"
 	"github.com/LeKovr/sfs/stream"
+	"github.com/LeKovr/sfs/widget"
 )
 
 // Config holds all config vars
@@ -24,11 +25,13 @@ type Config struct {
 	Store       storage.Config `group:"Storage Options" namespace:"store"`
 	Stream      stream.Config  `group:"WS stream Options" namespace:"ws"`
 	PubSub      pubsub.Config  `group:"PuSub Options" namespace:"ps"`
+	Widget      widget.Config  `group:"Widget Options" namespace:"wg"`
 }
 
 const (
 	// ErrNoSingleFile returned when does not contain single file in field 'file'
-	ContextAuthKey = "SFS-CAuth"
+	ContextAuthKey    = "SFS-CAuth"
+	ContextRequestKey = "SFS-Request-ID"
 )
 
 func run(exitFunc func(code int)) {
@@ -54,9 +57,14 @@ func run(exitFunc func(code int)) {
 		return
 	}
 	defer store.Close()
+
+	widgetService := widget.New(cfg.Widget, l, pubsubService, ContextAuthKey, ContextRequestKey)
+
 	go pubsubService.Run()
 	go store.HandlersRun()
 	defer store.HandlersClose()
+	go widgetService.HandlersRun()
+	defer widgetService.HandlersClose()
 
 	authService := cauth.New(cfg.CAuth, l, ContextAuthKey)
 	sfsService := sfs.New(cfg.SFS, l, store, ContextAuthKey)
@@ -72,6 +80,7 @@ func run(exitFunc func(code int)) {
 	streamService.SetupRouter(router)
 	authService.SetupRouter(router)
 	sfsService.SetupRouter(router)
+	widgetService.SetupRouter(router)
 
 	router.Run(cfg.Listen)
 

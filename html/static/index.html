@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Sample page service</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" type="text/css" href="/static/fileform.css">
+  <link rel="stylesheet" type="text/css" href="/static/table.css">
+  <script src="/static/fileform.js"></script>
+  <script src="/api/widget.js?layout=default"></script>
+</head>
+<body onload = pageLoaded(false);>
+<h1>Пример страницы</h1>
+  <div id="top">Шапка</div>
+  <div id="navy">Навигация</div>
+  <div id="menu">Меню</div>
+
+<p>Эта статическая страница демонстрирует технологию отложенной отрисовки виджетов.
+</p>
+<h3>Алгоритм работы с ws</h3>
+<ul>
+<li>После загрузки страницы браузер вызывает обработчик pageLoaded
+<li>pageLoaded отправляет GET-запрос /api/profile
+<li>обработчик /api/profile извлекает из cookie токен пользователя и возвращает в js
+<li>js открывает ws-соединение с адресом /ws/$TOKEN
+<li>обработчик ws-соединения подписывает его на события user.$TOKEN
+</ul>
+
+
+<h3>Дополнения для поддержки виджетов</h3>
+<ul>
+  <li>На странице подключен скрипт `/api/widget.js?layout=default`
+<li>обработчик этого адреса генерит RequestID, создает событие widget.$REQUEST_ID и возвращает REQUEST_ID в js
+<li>обработчик событий widget начинает генерить виджеты
+<li>js открывает ws-соединение с адресом /ws/$REQUEST_ID/$TOKEN
+<li>обработчик ws-соединения подписывает его на события user.$TOKEN и widget.$REQUEST_ID
+<li>по факту подписки на события widget.$REQUEST_ID все уже сформированные к этому моменту виджеты отправляются пользователю, остальные отправляются по факту генерации
+</ul>
+
+
+<div id="log"></div>
+</body>
+</html>

@@ -4,6 +4,7 @@ package pubsub
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	//	"fmt"
 
 	log "go.uber.org/zap"
@@ -36,12 +37,12 @@ type Message struct {
 	Topic   string
 	Payload []byte
 }
-type MessageStream chan *Message
+type MessageStream chan Message
 
 type Stream struct {
 	Topic      string
-	Messages   chan *Message
-	unregister chan chan *Message
+	Messages   chan Message
+	unregister chan chan Message
 }
 
 // Service holds the set of active connections and broadcasts messages
@@ -49,11 +50,11 @@ type Service struct {
 	Config *Config
 	Log    *log.SugaredLogger
 	// Published messages
-	broadcast chan *Message
+	broadcast chan Message
 	// Register requests from the connections.
 	register chan *Stream
 	// Unregister requests from connections.
-	unregister chan chan *Message
+	unregister chan chan Message
 	// Quit channel
 	quit chan struct{}
 }
@@ -63,16 +64,17 @@ func New(cfg Config, logger *log.SugaredLogger) *Service {
 	srv := Service{
 		Config:     &cfg,
 		Log:        logger,
-		broadcast:  make(chan *Message),
+		broadcast:  make(chan Message),
 		register:   make(chan *Stream),
-		unregister: make(chan chan *Message),
-		quit:       make(chan struct{}),
+		unregister: make(chan chan Message),
 	}
 	return &srv
 }
 
 func (srv Service) Close() {
-	srv.quit <- struct{}{}
+	if srv.quit != nil {
+		srv.quit <- struct{}{}
+	}
 }
 
 func Unmarshal(data []byte, v interface{}) error {
@@ -86,7 +88,7 @@ func (s Stream) Unsubscribe() {
 func (srv Service) Subscribe(topic string) (Stream, error) {
 	s := Stream{
 		Topic:      topic,
-		Messages:   make(chan *Message),
+		Messages:   make(chan Message),
 		unregister: srv.unregister,
 	}
 	srv.register <- &s
@@ -99,15 +101,16 @@ func (srv Service) Publish(topic string, data interface{}) error {
 		return err
 	}
 	srv.Log.Debugw("Send event", "topic", topic, "data", string(b))
-	srv.broadcast <- &Message{topic, b}
+	srv.broadcast <- Message{topic, b}
 	return nil
 }
 
-func (srv Service) Run() {
-	subscribers := map[string]map[chan *Message]bool{}
-	clients := map[chan *Message]string{}
+func (srv *Service) Run() {
+	subscribers := map[string]map[chan Message]bool{}
+	clients := map[chan Message]string{}
+	buffers := map[string][]Message{}
 	srv.Log.Debugw("Hub opened")
-
+	srv.quit = make(chan struct{})
 	for {
 		select {
 		case c := <-srv.register:
@@ -115,12 +118,20 @@ func (srv Service) Run() {
 			topicSubscribers, ok := subscribers[c.Topic]
 			srv.Log.Debugw("Subscribe", "topic", c.Topic)
 			if !ok {
-				topicSubscribers = map[chan *Message]bool{c.Messages: true}
+				topicSubscribers = map[chan Message]bool{c.Messages: true}
 			} else {
 				topicSubscribers[c.Messages] = true
 			}
 			subscribers[c.Topic] = topicSubscribers
 			clients[c.Messages] = c.Topic
+			if buffer, ok := buffers[c.Topic]; ok {
+				srv.Log.Debugw("Push waiting events", "count", len(buffer))
+				for _, m := range buffer {
+					srv.Log.Debugw("Hub buffer", "payload", string(m.Payload))
+					c.Messages <- m
+				}
+				delete(buffers, c.Topic)
+			}
 		case c := <-srv.unregister:
 			// Unregister client from hub
 			if topic, ok := clients[c]; ok {
@@ -134,15 +145,26 @@ func (srv Service) Run() {
 			srv.Log.Debugw("Hub message", "topic", m.Topic, "payload", string(m.Payload))
 			topicSubscribers, ok := subscribers[m.Topic]
 			if !ok {
-				srv.Log.Warnw("No subscribers for topic", "topic", m.Topic)
-				continue
-			}
-			srv.Log.Debugw("Hub message",
-				"topic", m.Topic,
-				"subscribers", len(topicSubscribers),
-				"payload", string(m.Payload))
-			for k := range topicSubscribers {
-				k <- m
+				if !strings.HasPrefix(m.Topic, "once.") {
+					srv.Log.Warnw("No subscribers for topic", "topic", m.Topic)
+					continue
+				}
+				// save in buffer
+				buffer, ok := buffers[m.Topic]
+				if !ok {
+					buffer = []Message{m}
+				} else {
+					buffer = append(buffer, m)
+				}
+				buffers[m.Topic] = buffer
+			} else {
+				srv.Log.Debugw("Hub message point",
+					"topic", m.Topic,
+					"subscribers", len(topicSubscribers),
+					"payload", string(m.Payload))
+				for k := range topicSubscribers {
+					k <- m
+				}
 			}
 		case <-srv.quit:
 			for k := range clients {
