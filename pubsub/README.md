@@ -1,1 +1,1 @@
-# Cookie Auth
+# Simple golang pub/sub

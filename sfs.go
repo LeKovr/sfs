@@ -1,4 +1,4 @@
-// Package upload implements image upload handlers.
+// Package upload implements file upload handlers.
 package sfs
 
 import (

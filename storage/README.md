@@ -1,0 +1,1 @@
+# Simple file storage powered by [badger](https://github.com/dgraph-io/badger/v2)

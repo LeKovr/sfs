@@ -11,9 +11,9 @@
 </head>
 <body onload = pageLoaded(false);>
 <h1>Пример страницы</h1>
-  <div id="top">Шапка</div>
-  <div id="navy">Навигация</div>
-  <div id="menu">Меню</div>
+  <div id="top"  style="width:200px;height:30px;background:red">Шапка</div>
+  <div id="navy" style="width:200px;height:30px;background:yellow">Навигация</div>
+  <div id="menu" style="width:200px;height:30px;background:green">Меню</div>
 
 <p>Эта статическая страница демонстрирует технологию отложенной отрисовки виджетов.
 </p>
@@ -36,7 +36,6 @@
 <li>обработчик ws-соединения подписывает его на события user.$TOKEN и widget.$REQUEST_ID
 <li>по факту подписки на события widget.$REQUEST_ID все уже сформированные к этому моменту виджеты отправляются пользователю, остальные отправляются по факту генерации
 </ul>
-
 
 <div id="log"></div>
 </body>

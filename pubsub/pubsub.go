@@ -1,4 +1,4 @@
-// Package upload implements image upload handlers.
+// Package pubsub contains a simple pub/sub 
 package pubsub
 
 import (
