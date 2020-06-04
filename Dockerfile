@@ -1,5 +1,5 @@
 
-FROM golang:1.13.5-alpine3.11 as builder
+FROM golang:1.14.0-alpine3.11 as builder
 
 WORKDIR /opt/app
 RUN apk --update add curl git make gcc libc-dev
