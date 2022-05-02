@@ -6,7 +6,7 @@ require (
 	github.com/dgraph-io/badger/v2 v2.0.1
 	github.com/gin-contrib/expvar v0.0.1
 	github.com/gin-contrib/zap v0.0.1
-	github.com/gin-gonic/gin v1.7.3
+	github.com/gin-gonic/gin v1.7.7
 	github.com/google/uuid v1.1.1
 	github.com/gorilla/websocket v1.4.1
 	github.com/jessevdk/go-flags v1.4.0
